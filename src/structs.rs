@@ -3,6 +3,7 @@
 use mem;
 use message::mach_msg_type_number_t;
 
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Hash, PartialOrd, PartialEq, Eq, Ord)]
 pub struct x86_thread_state64_t {
@@ -29,6 +30,7 @@ pub struct x86_thread_state64_t {
     pub __gs: u64,
 }
 
+#[cfg(target_arch = "x86_64")]
 impl x86_thread_state64_t {
     pub fn new() -> Self {
         Self {
@@ -53,6 +55,38 @@ impl x86_thread_state64_t {
             __cs: 0,
             __fs: 0,
             __gs: 0,
+        }
+    }
+
+    pub fn count() -> mach_msg_type_number_t {
+        (mem::size_of::<Self>() / mem::size_of::<::libc::c_int>()) as mach_msg_type_number_t
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, Hash, PartialOrd, PartialEq, Eq, Ord)]
+pub struct arm_thread_state64_t {
+    pub __x: [u64; 29], // General purpose registers x0-x28
+    pub __fp: u64,      // Frame pointer x29
+    pub __lr: u64,      // Link register x30
+    pub __sp: u64,      // Stack pointer x31
+    pub __pc: u64,      // Program counter
+    pub __cpsr: u32,    // Current program status register
+    pub __pad: u32,     // Same size for 32-bit or 64-bit clients
+}
+
+#[cfg(target_arch = "aarch64")]
+impl arm_thread_state64_t {
+    pub fn new() -> Self {
+        Self {
+            __x: [0; 29],
+            __fp: 0,
+            __lr: 0,
+            __sp: 0,
+            __pc: 0,
+            __cpsr: 0,
+            __pad: 0,
         }
     }
 
