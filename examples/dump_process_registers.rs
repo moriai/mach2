@@ -19,7 +19,6 @@ use mach2::thread_act::thread_get_state;
 use mach2::thread_status::x86_THREAD_STATE64;
 #[cfg(target_arch = "aarch64")]
 use mach2::thread_status::ARM_THREAD_STATE64;
-use mach2::thread_status::thread_state_flavor_t;
 use mach2::traps::{mach_task_self, task_for_pid};
 
 use std::io::prelude::*;
@@ -114,11 +113,11 @@ fn main() {
 
     unsafe {
         #[cfg(target_arch = "x86_64")]
-        static THREAD_STATE64: thread_state_flavor_t = x86_THREAD_STATE64;
+        let flavor = x86_THREAD_STATE64;
         #[cfg(target_arch = "x86_64")]
         type thread_state64_t = mach2::structs::x86_thread_state64_t;
         #[cfg(target_arch = "aarch64")]
-        static THREAD_STATE64: thread_state_flavor_t = ARM_THREAD_STATE64;
+        let flavor = ARM_THREAD_STATE64;
         #[cfg(target_arch = "aarch64")]
         type thread_state64_t = mach2::structs::arm_thread_state64_t;
 
@@ -126,7 +125,7 @@ fn main() {
             Vec::from_raw_parts(thread_list, thread_count as usize, thread_count as usize);
         let state = thread_state64_t::new();
         let state_count = thread_state64_t::count();
-        let flavor = THREAD_STATE64;
+
         for (idx, &thread) in threads.iter().enumerate() {
             println!("Thread {}:", idx);
             let kret = thread_get_state(
