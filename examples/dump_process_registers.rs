@@ -1,6 +1,6 @@
 //! A script to read and dump to stdout the current register values of a
 //! process.
-#![allow(non_camel_case_types)]
+#![feature(allocator_api,nonnull_slice_from_raw_parts)]
 
 extern crate libc;
 extern crate mach2;
@@ -20,6 +20,41 @@ use mach2::thread_status::x86_THREAD_STATE64;
 #[cfg(target_arch = "aarch64")]
 use mach2::thread_status::ARM_THREAD_STATE64;
 use mach2::traps::{mach_task_self, task_for_pid};
+use mach2::vm::{mach_vm_allocate, mach_vm_deallocate};
+use mach2::vm_types::{mach_vm_address_t, mach_vm_size_t};
+use mach2::vm_statistics::VM_FLAGS_ANYWHERE;
+
+use std::alloc::{Allocator, AllocError, Layout};
+use std::ptr::NonNull;
+
+struct MachAllocator;
+
+unsafe impl Allocator for MachAllocator {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        unsafe {
+            let task = mach_task_self();
+            let mut raw_mem: mach_vm_address_t = 0;
+            let size = layout.size() as mach_vm_size_t;
+            if mach_vm_allocate(task, &mut raw_mem, size, VM_FLAGS_ANYWHERE) != KERN_SUCCESS {
+                Err(AllocError)
+            } else {
+                let ptr = NonNull::new_unchecked(raw_mem as *mut u8);
+                Ok(NonNull::slice_from_raw_parts(ptr, size as usize))
+            }
+        }
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        let task = mach_task_self();
+        let raw_mem = *ptr.as_ptr() as mach_vm_address_t;
+        let size = layout.size() as mach_vm_size_t;
+        if mach_vm_deallocate(task, raw_mem, size) != KERN_SUCCESS {
+            panic!("mach_vm_deallocate fail");
+        }
+    }
+}
+
+static MACH_ALLOCATOR: MachAllocator = MachAllocator;
 
 use std::io::prelude::*;
 
@@ -115,14 +150,16 @@ fn main() {
         #[cfg(target_arch = "x86_64")]
         let flavor = x86_THREAD_STATE64;
         #[cfg(target_arch = "x86_64")]
+        #[allow(non_camel_case_types)]
         type thread_state64_t = mach2::structs::x86_thread_state64_t;
         #[cfg(target_arch = "aarch64")]
         let flavor = ARM_THREAD_STATE64;
         #[cfg(target_arch = "aarch64")]
+        #[allow(non_camel_case_types)]
         type thread_state64_t = mach2::structs::arm_thread_state64_t;
 
         let threads =
-            Vec::from_raw_parts(thread_list, thread_count as usize, thread_count as usize);
+            Vec::from_raw_parts_in(thread_list, thread_count as usize, thread_count as usize, &MACH_ALLOCATOR);
         let state = thread_state64_t::new();
         let state_count = thread_state64_t::count();
 
